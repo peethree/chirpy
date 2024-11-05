@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -18,8 +19,9 @@ type requestParameters struct {
 }
 
 type responseParameters struct {
-	Error string `json:"error"`
-	Valid bool   `json:"valid"`
+	Error        string `json:"error"`
+	Valid        bool   `json:"valid"`
+	Cleaned_body string `json:"cleaned_body"`
 }
 
 func main() {
@@ -75,9 +77,11 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 
 	// check length of json body, cannot exceed 140 chars
 	if len(params.Body) <= 140 && len(params.Body) > 0 {
+
 		// response for accepted body
 		response := responseParameters{
-			Valid: true,
+			Valid:        true,
+			Cleaned_body: replaceProfanity(params.Body),
 		}
 		statusCode := 200
 		// encode response
@@ -101,6 +105,24 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 		statusCode := 400
 		encodeResponse(w, response, statusCode)
 	}
+}
+
+// helper function to clean profanity
+func replaceProfanity(p string) string {
+
+	// the no-no words
+	profanity := []string{"kerfuffle", "sharbert", "fornax"}
+	// case insensitive
+	str := strings.ToLower(p)
+
+	for _, word := range profanity {
+		if strings.Contains(str, word) {
+			// replace the profanity with "****"
+			str = strings.ReplaceAll(str, word, "****")
+		}
+	}
+
+	return str
 }
 
 // helper function to reduce copying code
