@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync/atomic"
 )
@@ -9,6 +11,15 @@ import (
 // struct for keeping track server hits, atomic.Int32 has various methods to change the value
 type apiConfig struct {
 	fileserverHits atomic.Int32
+}
+
+type requestParameters struct {
+	Body string `json:"body"`
+}
+
+type responseParameters struct {
+	Error string `json:"error"`
+	Valid bool   `json:"valid"`
 }
 
 func main() {
@@ -25,6 +36,7 @@ func main() {
 	// mux.HandleFunc("GET /api/metrics", apiCfg.serverHitsHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHitHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetrics)
+	mux.HandleFunc("POST /api/validate_chirp", validateChirp)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -50,6 +62,58 @@ func handlerHealthz(w http.ResponseWriter, r *http.Request) {
 
 	// write body
 	w.Write([]byte("OK"))
+}
+
+func validateChirp(w http.ResponseWriter, r *http.Request) {
+	// decode the JSON body
+	decoder := json.NewDecoder(r.Body)
+	params := requestParameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		http.Error(w, "Invalid Json", http.StatusBadRequest)
+	}
+
+	// check length of json body, cannot exceed 140 chars
+	if len(params.Body) <= 140 && len(params.Body) > 0 {
+		// response for accepted body
+		response := responseParameters{
+			Valid: true,
+		}
+		statusCode := 200
+		// encode response
+		encodeResponse(w, response, statusCode)
+	}
+
+	if len(params.Body) == 0 {
+		response := responseParameters{
+			Error: "Chirp can't be 0 characters",
+			Valid: false,
+		}
+		statusCode := 400
+		encodeResponse(w, response, statusCode)
+	}
+
+	if len(params.Body) > 140 {
+		response := responseParameters{
+			Error: "Chirp is too long",
+			Valid: false,
+		}
+		statusCode := 400
+		encodeResponse(w, response, statusCode)
+	}
+}
+
+// helper function to reduce copying code
+func encodeResponse(w http.ResponseWriter, response responseParameters, statusCode int) {
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	w.Write(dat)
 }
 
 // method on apiConfig struct handler
