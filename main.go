@@ -113,16 +113,22 @@ func replaceProfanity(p string) string {
 	// the no-no words
 	profanity := []string{"kerfuffle", "sharbert", "fornax"}
 	// case insensitive
-	str := strings.ToLower(p)
 
+	// split up string
+	inputStringList := strings.Split(p, " ")
+
+	// check the input string for profanity, replace with **** if it matches profanity
 	for _, word := range profanity {
-		if strings.Contains(str, word) {
-			// replace the profanity with "****"
-			str = strings.ReplaceAll(str, word, "****")
+		for i, input := range inputStringList {
+			if strings.EqualFold(word, input) {
+				inputStringList[i] = "****"
+			}
 		}
 	}
 
-	return str
+	result := strings.Join(inputStringList, " ")
+
+	return result
 }
 
 // helper function to reduce copying code
