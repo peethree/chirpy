@@ -22,7 +22,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
-	dev            string
+	platform       string
 }
 
 // response struct for creating new users
@@ -38,10 +38,7 @@ type requestUserParams struct {
 	Email string `json:"email"`
 }
 
-type requestParameters struct {
-	Body string `json:"body"`
-}
-
+// chirp request parameters
 type Chirp struct {
 	Body   string    `json:"body"`
 	UserID uuid.UUID `json:"user_id"`
@@ -68,7 +65,7 @@ func main() {
 	}
 
 	// check if .env platform is set to dev
-	devCheck := os.Getenv("PLATFORM")
+	platformCheck := os.Getenv("PLATFORM")
 
 	// open connection to db
 	db, err := sql.Open("postgres", dbURL)
@@ -83,7 +80,8 @@ func main() {
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
-		dev:            devCheck,
+		//
+		platform: platformCheck,
 	}
 
 	// create new serve mux
@@ -124,7 +122,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	// check length of json body, cannot exceed 140 chars
 	if len(params.Body) <= 140 {
 
-		// use the helper function to clean up profanity
+		// use the helperfunction to clean up profanity
 		removed_profanity := replaceProfanity(params.Body)
 
 		// insert the chirp into the db with the sqlc generated createchirp function
@@ -134,7 +132,6 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
-			fmt.Printf("Error creating chirp: %v\n", err)
 			http.Error(w, "Invalid chirp", http.StatusBadRequest)
 			return
 		}
@@ -179,6 +176,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// fill up the response fields with the data from the database
 	response := User{
 		Id:         new_user.ID,
 		Created_at: new_user.CreatedAt,
@@ -282,7 +280,7 @@ func (cfg *apiConfig) adminMetricsHandler(w http.ResponseWriter, r *http.Request
 
 // reset method handler that sets hitnumber to 0 and removes all the users
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
-	if cfg.dev != "dev" {
+	if cfg.platform != "dev" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		// forbidden
 		w.WriteHeader(403)
