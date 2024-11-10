@@ -25,11 +25,6 @@ type apiConfig struct {
 	dev            string
 }
 
-// struct for making new users and getting their email address
-type requestUserParams struct {
-	Email string `json:"email"`
-}
-
 // response struct for creating new users
 type User struct {
 	Id         uuid.UUID `json:"id"`
@@ -38,14 +33,28 @@ type User struct {
 	Email      string    `json:"email"`
 }
 
+// struct for making new users and getting their email address
+type requestUserParams struct {
+	Email string `json:"email"`
+}
+
 type requestParameters struct {
 	Body string `json:"body"`
 }
 
-type responseParameters struct {
-	Error        string `json:"error"`
-	Valid        bool   `json:"valid"`
-	Cleaned_body string `json:"cleaned_body"`
+type Chirp struct {
+	Body   string    `json:"body"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// struct for responding to api/chirps
+type responseChirp struct {
+	Error      string    `json:"error"`
+	Valid      bool      `json:"valid"`
+	Body       string    `json:"body"`
+	Created_at time.Time `json:"created_at"`
+	Updated_at time.Time `json:"updated_at"`
+	User_id    uuid.UUID `json:"user_id"`
 }
 
 func main() {
@@ -85,8 +94,8 @@ func main() {
 	// mux.HandleFunc("GET /api/metrics", apiCfg.serverHitsHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetricsHandler)
-	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
+	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -102,6 +111,93 @@ func main() {
 	server.ListenAndServe()
 }
 
+func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
+	// decode the JSON body
+	decoder := json.NewDecoder(r.Body)
+	params := Chirp{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		http.Error(w, "Invalid Json", http.StatusBadRequest)
+		return
+	}
+
+	// check length of json body, cannot exceed 140 chars
+	if len(params.Body) <= 140 {
+
+		// use the helper function to clean up profanity
+		removed_profanity := replaceProfanity(params.Body)
+
+		// insert the chirp into the db with the sqlc generated createchirp function
+		chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
+			Body:   removed_profanity,
+			UserID: params.UserID,
+		})
+
+		if err != nil {
+			fmt.Printf("Error creating chirp: %v\n", err)
+			http.Error(w, "Invalid chirp", http.StatusBadRequest)
+			return
+		}
+
+		// response for accepted body
+		response := responseChirp{
+			Valid:      true,
+			Body:       chirp.Body,
+			Created_at: chirp.CreatedAt,
+			Updated_at: chirp.UpdatedAt,
+			User_id:    chirp.UserID,
+		}
+		statusCode := 201
+		// encode response
+		encodeResponse(w, response, statusCode)
+	}
+
+	if len(params.Body) > 140 {
+		response := responseChirp{
+			Error: "Chirp is too long",
+			Valid: false,
+		}
+		statusCode := 400
+		encodeResponse(w, response, statusCode)
+	}
+}
+
+func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) {
+	// decode JSON for email
+	decoder := json.NewDecoder(r.Body)
+	params := requestUserParams{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		http.Error(w, "Invalid Json", http.StatusBadRequest)
+		return
+	}
+
+	// use the generated CreateUser function to write a sql query n create a user in the database
+	new_user, err := cfg.db.CreateUser(r.Context(), params.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := User{
+		Id:         new_user.ID,
+		Created_at: new_user.CreatedAt,
+		Updated_at: new_user.UpdatedAt,
+		Email:      new_user.Email,
+	}
+
+	// encode response
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	w.Write(dat)
+}
+
 // custom handler function
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	//write Content-Type: text/plain; charset=utf-8
@@ -112,78 +208,6 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 	// write body
 	w.Write([]byte("OK"))
-}
-
-func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) {
-	// decode JSON for email
-	decoder := json.NewDecoder(r.Body)
-	params := requestUserParams{}
-	err := decoder.Decode(&params)
-	if err != nil {
-		http.Error(w, "Invalid Json", http.StatusBadRequest)
-	}
-
-	// populate response
-	response := User{
-		Id:         uuid.New(),
-		Created_at: time.Now(),
-		Updated_at: time.Now(),
-		Email:      params.Email,
-	}
-
-	if len(params.Email) > 0 {
-		// encode response
-		dat, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshalling JSON: %s", err)
-			w.WriteHeader(500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(201)
-		w.Write(dat)
-	}
-}
-
-func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
-	// decode the JSON body
-	decoder := json.NewDecoder(r.Body)
-	params := requestParameters{}
-	err := decoder.Decode(&params)
-	if err != nil {
-		http.Error(w, "Invalid Json", http.StatusBadRequest)
-	}
-
-	// check length of json body, cannot exceed 140 chars
-	if len(params.Body) <= 140 && len(params.Body) > 0 {
-
-		// response for accepted body
-		response := responseParameters{
-			Valid:        true,
-			Cleaned_body: replaceProfanity(params.Body),
-		}
-		statusCode := 200
-		// encode response
-		encodeResponse(w, response, statusCode)
-	}
-
-	if len(params.Body) == 0 {
-		response := responseParameters{
-			Error: "Chirp can't be 0 characters",
-			Valid: false,
-		}
-		statusCode := 400
-		encodeResponse(w, response, statusCode)
-	}
-
-	if len(params.Body) > 140 {
-		response := responseParameters{
-			Error: "Chirp is too long",
-			Valid: false,
-		}
-		statusCode := 400
-		encodeResponse(w, response, statusCode)
-	}
 }
 
 // helper function to clean profanity
@@ -210,7 +234,7 @@ func replaceProfanity(p string) string {
 }
 
 // helper function to reduce copying code
-func encodeResponse(w http.ResponseWriter, response responseParameters, statusCode int) {
+func encodeResponse(w http.ResponseWriter, response responseChirp, statusCode int) {
 	dat, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
@@ -260,15 +284,16 @@ func (cfg *apiConfig) adminMetricsHandler(w http.ResponseWriter, r *http.Request
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	if cfg.dev != "dev" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		// forbidden
 		w.WriteHeader(403)
-		w.Write([]byte("Must be dev for this api endpoint."))
+		w.Write([]byte("No permission for this endpoint"))
 	} else {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		// sets hits to 0
 		cfg.fileserverHits.Store(0)
 		// delete users
-		//
+		cfg.db.Reset(r.Context())
 		w.Write([]byte("Hits reset to 0, users deleted"))
 	}
 }

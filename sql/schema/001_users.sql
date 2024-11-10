@@ -9,4 +9,5 @@ CREATE TABLE users (
 -- +goose Down
 DROP TABLE users;
 
+
 -- postgres://postgres:postgres@localhost:5432/chirpy
