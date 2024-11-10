@@ -94,6 +94,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetricsHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
+	mux.HandleFunc("GET /api/chirps", apiCfg.loadChirpsHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -107,6 +108,10 @@ func main() {
 
 	// Use the server's ListenAndServe method to start the server
 	server.ListenAndServe()
+}
+
+func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	// retrieves all chirps in ascending order by created_at
 }
 
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
