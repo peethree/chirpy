@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -48,6 +49,7 @@ type Chirp struct {
 type responseChirp struct {
 	Error      string    `json:"error"`
 	Valid      bool      `json:"valid"`
+	ID         uuid.UUID `json:"id"`
 	Body       string    `json:"body"`
 	Created_at time.Time `json:"created_at"`
 	Updated_at time.Time `json:"updated_at"`
@@ -80,8 +82,7 @@ func main() {
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
-		//
-		platform: platformCheck,
+		platform:       platformCheck,
 	}
 
 	// create new serve mux
@@ -95,6 +96,7 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
 	mux.HandleFunc("GET /api/chirps", apiCfg.loadChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.loadChirpByIDHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -110,10 +112,76 @@ func main() {
 	server.ListenAndServe()
 }
 
-func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) {
-	// retrieves all chirps in ascending order by created_at
+func (cfg *apiConfig) loadChirpByIDHandler(w http.ResponseWriter, r *http.Request) {
+	// You can get the string value of the path parameter like in Go with the http.Request.PathValue method.
+	pathValue := r.PathValue("chirpID")
+	// pathvalue returns a string, LoadChirpByID expects a uuid.UUID type input parameter
+	chirpID, err := uuid.Parse(pathValue)
+	if err != nil {
+		fmt.Println("%s", err)
+	}
+
+	// sqlc generated helper function based on query: SELECT * FROM chirps WHERE id = $1;
+	chirp, err := cfg.db.LoadChirpByID(r.Context(), chirpID)
+	if err != nil {
+		fmt.Println("%s", err)
+		// 404
+		http.Error(w, "Can't find this chirp", 404)
+		return
+	}
+
+	response := responseChirp{
+		ID:         chirp.ID,
+		Created_at: chirp.CreatedAt,
+		Updated_at: chirp.UpdatedAt,
+		Body:       chirp.Body,
+		User_id:    chirp.UserID,
+	}
+
+	encodeResponse(w, response, 200)
 }
 
+// retrieves all chirps in ascending order by created_at (oldest first)
+func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) {
+
+	// sqlc generated function for loading all chirps based on: SELECT * FROM chirps;
+	loadedChirps, err := cfg.db.LoadChirps(r.Context())
+	if err != nil {
+		http.Error(w, "Can't load chirps", http.StatusBadRequest)
+	}
+
+	// declare response variable as a slice of responseChirp structs
+	var response []responseChirp
+
+	// loop over all loaded chirps, fill up a responseChirp struct for each chirp, append it to the response slice
+	for _, chirp := range loadedChirps {
+		individualChirp := responseChirp{
+			Body:       chirp.Body,
+			Created_at: chirp.CreatedAt,
+			Updated_at: chirp.UpdatedAt,
+			User_id:    chirp.UserID,
+		}
+		response = append(response, individualChirp)
+	}
+
+	// sort the chirps by created_at
+	sort.Slice(response, func(i, j int) bool {
+		return response[i].Created_at.Before(response[j].Created_at)
+	})
+
+	// marshal the chirps, encoderesponse function does not work with a slice of responseChirp as a parameter
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
+}
+
+// create chirp handler
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	// decode the JSON body
 	decoder := json.NewDecoder(r.Body)
@@ -145,6 +213,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		// response for accepted body
 		response := responseChirp{
 			Valid:      true,
+			ID:         chirp.ID,
 			Body:       chirp.Body,
 			Created_at: chirp.CreatedAt,
 			Updated_at: chirp.UpdatedAt,
@@ -153,7 +222,8 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode := 201
 		// encode response
 		encodeResponse(w, response, statusCode)
-	} else {
+
+	} else { // when the body of the request has more than 140 characters
 		response := responseChirp{
 			Error: "Chirp is too long",
 			Valid: false,
@@ -230,6 +300,7 @@ func replaceProfanity(p string) string {
 		}
 	}
 
+	// add all the seperate (now filtered) words back together in a result string
 	result := strings.Join(inputStringList, " ")
 
 	return result
