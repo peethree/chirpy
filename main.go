@@ -137,6 +137,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
+			fmt.Println("%s", err)
 			http.Error(w, "Invalid chirp", http.StatusBadRequest)
 			return
 		}
@@ -152,9 +153,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode := 201
 		// encode response
 		encodeResponse(w, response, statusCode)
-	}
-
-	if len(params.Body) > 140 {
+	} else {
 		response := responseChirp{
 			Error: "Chirp is too long",
 			Valid: false,
