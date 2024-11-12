@@ -93,14 +93,14 @@ func main() {
 
 	// register handlers
 	mux.HandleFunc("GET /api/healthz", healthzHandler)
-	// mux.HandleFunc("GET /api/metrics", apiCfg.serverHitsHandler)
-	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
-	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetricsHandler)
-	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
-	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
 	mux.HandleFunc("GET /api/chirps", apiCfg.loadChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.loadChirpByIDHandler)
-	mux.HandleFunc("POST api/login", apiCfg.loginHandler)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetricsHandler)
+
+	mux.HandleFunc("POST /api/login", apiCfg.loginHandler)
+	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
+	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
+	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -251,47 +251,48 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// hash the user's password
-	hashedPw, err := auth.HashPassword(params.Password)
+	// password length checking
+	if len(params.Password) >= 8 {
+		// hash the user's password
+		hashedPw, err := auth.HashPassword(params.Password)
+		if err != nil {
+			fmt.Println("%s", err)
+		}
 
-	// existing users before the password column have null password fields
-	var hashedPwField sql.NullString
-	if hashedPw == "" {
-		// null
-		hashedPwField = sql.NullString{String: "", Valid: false}
+		// use the generated CreateUser function to create a user in the database
+		new_user, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+			Email:          params.Email,
+			HashedPassword: hashedPw,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// fill up the response fields with the data from the database
+		response := User{
+			Id:         new_user.ID,
+			Created_at: new_user.CreatedAt,
+			Updated_at: new_user.UpdatedAt,
+			Email:      new_user.Email,
+		}
+
+		// encode response
+		dat, err := json.Marshal(response)
+		if err != nil {
+			log.Printf("Error marshalling JSON: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		w.Write(dat)
 	} else {
-		// valid string
-		hashedPwField = sql.NullString{String: hashedPw, Valid: true}
-	}
-
-	// use the generated CreateUser function to write a sql query n create a user in the database
-	new_user, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
-		Email:          params.Email,
-		HashedPassword: hashedPwField,
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		// in case the password length is too short
+		http.Error(w, "Password not strong enough", http.StatusBadRequest)
 		return
 	}
 
-	// fill up the response fields with the data from the database
-	response := User{
-		Id:         new_user.ID,
-		Created_at: new_user.CreatedAt,
-		Updated_at: new_user.UpdatedAt,
-		Email:      new_user.Email,
-	}
-
-	// encode response
-	dat, err := json.Marshal(response)
-	if err != nil {
-		log.Printf("Error marshalling JSON: %s", err)
-		w.WriteHeader(500)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	w.Write(dat)
 }
 
 // custom handler function
