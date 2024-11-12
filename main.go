@@ -27,13 +27,17 @@ type apiConfig struct {
 	platform       string
 }
 
-// response struct for creating new users
+type loginParams struct {
+	Password string `json:"password"`
+	Email    string `json:"email"`
+}
+
+// response struct for creating new users/ logging in
 type User struct {
 	Id         uuid.UUID `json:"id"`
 	Created_at time.Time `json:"created_at"`
 	Updated_at time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
-	Password   string    `json:"password"`
 }
 
 // struct for making new users and getting their email address
@@ -72,7 +76,7 @@ func main() {
 	// check if .env platform is set to dev
 	platformCheck := os.Getenv("PLATFORM")
 
-	// open connection to db
+	// open connection to the db
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("Error opening database: %s", err)
@@ -117,7 +121,51 @@ func main() {
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
+	// decode JSON body
+	decoder := json.NewDecoder(r.Body)
+	params := loginParams{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		http.Error(w, "Invalid Json", 400)
+		return
+	}
 
+	// authenticate user:
+	// check to see if email is in the table then compare password
+	existCheck, err := cfg.db.Login(r.Context(), params.Email)
+	if err != nil {
+		fmt.Println("%s", err)
+		// 401 unauthorized
+		http.Error(w, "This email does not match the database", 401)
+		return
+	}
+
+	// check if the hash matches password if the user's email exists
+	if auth.CheckPasswordHash(params.Password, existCheck.HashedPassword) != nil {
+		fmt.Println("%s", err)
+		// 401 unauthorized
+		http.Error(w, "Wrong password", 401)
+		return
+	}
+
+	// when both checks go through: login user, and encode response
+	response := User{
+		Id:         existCheck.ID,
+		Created_at: existCheck.CreatedAt,
+		Updated_at: existCheck.UpdatedAt,
+		Email:      existCheck.Email,
+	}
+
+	// encode response
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
 }
 
 func (cfg *apiConfig) loadChirpByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -151,11 +199,10 @@ func (cfg *apiConfig) loadChirpByIDHandler(w http.ResponseWriter, r *http.Reques
 
 // retrieves all chirps in ascending order by created_at (oldest first)
 func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) {
-
 	// sqlc generated function for loading all chirps based on: SELECT * FROM chirps;
 	loadedChirps, err := cfg.db.LoadChirps(r.Context())
 	if err != nil {
-		http.Error(w, "Can't load chirps", http.StatusBadRequest)
+		http.Error(w, "Can't load chirps", 400)
 	}
 
 	// declare response variable as a slice of responseChirp structs
@@ -196,7 +243,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	params := Chirp{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		http.Error(w, "Invalid Json", http.StatusBadRequest)
+		http.Error(w, "Invalid Json", 400)
 		return
 	}
 
@@ -214,7 +261,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			fmt.Println("%s", err)
-			http.Error(w, "Invalid chirp", http.StatusBadRequest)
+			http.Error(w, "Invalid chirp", 400)
 			return
 		}
 
@@ -247,7 +294,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	params := requestUserParams{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		http.Error(w, "Invalid Json", http.StatusBadRequest)
+		http.Error(w, "Invalid Json", 400)
 		return
 	}
 
@@ -265,7 +312,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 			HashedPassword: hashedPw,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), 400)
 			return
 		}
 
@@ -289,7 +336,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		w.Write(dat)
 	} else {
 		// in case the password length is too short
-		http.Error(w, "Password not strong enough", http.StatusBadRequest)
+		http.Error(w, "Password not strong enough", 400)
 		return
 	}
 
@@ -309,7 +356,6 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // helper function to clean profanity
 func replaceProfanity(p string) string {
-
 	// the no-no words
 	profanity := []string{"kerfuffle", "sharbert", "fornax"}
 
@@ -343,16 +389,6 @@ func encodeResponse(w http.ResponseWriter, response responseChirp, statusCode in
 	w.WriteHeader(statusCode)
 	w.Write(dat)
 }
-
-// method on apiConfig struct handler
-// func (cfg *apiConfig) serverHitsHandler(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-// 	w.WriteHeader(http.StatusOK)
-
-// 	// write the amount of server hits
-// 	hitNumber := fmt.Sprintf("Hits: %v", cfg.fileserverHits.Load())
-// 	w.Write([]byte(hitNumber))
-// }
 
 func (cfg *apiConfig) adminMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	// set header to html so page knows how to render it
