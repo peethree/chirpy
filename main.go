@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/peethree/chirpy/internal/auth"
 	"github.com/peethree/chirpy/internal/database"
 )
 
@@ -32,11 +33,13 @@ type User struct {
 	Created_at time.Time `json:"created_at"`
 	Updated_at time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
+	Password   string    `json:"password"`
 }
 
 // struct for making new users and getting their email address
 type requestUserParams struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // chirp request parameters
@@ -97,6 +100,7 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
 	mux.HandleFunc("GET /api/chirps", apiCfg.loadChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.loadChirpByIDHandler)
+	mux.HandleFunc("POST api/login", apiCfg.loginHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
@@ -110,6 +114,10 @@ func main() {
 
 	// Use the server's ListenAndServe method to start the server
 	server.ListenAndServe()
+}
+
+func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func (cfg *apiConfig) loadChirpByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -243,8 +251,24 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// hash the user's password
+	hashedPw, err := auth.HashPassword(params.Password)
+
+	// existing users before the password column have null password fields
+	var hashedPwField sql.NullString
+	if hashedPw == "" {
+		// null
+		hashedPwField = sql.NullString{String: "", Valid: false}
+	} else {
+		// valid string
+		hashedPwField = sql.NullString{String: hashedPw, Valid: true}
+	}
+
 	// use the generated CreateUser function to write a sql query n create a user in the database
-	new_user, err := cfg.db.CreateUser(r.Context(), params.Email)
+	new_user, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:          params.Email,
+		HashedPassword: hashedPwField,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
