@@ -136,7 +136,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println("%s", err)
 		// 401 unauthorized
-		http.Error(w, "This email does not match the database", 401)
+		http.Error(w, "This email does not match the database", http.StatusUnauthorized)
 		return
 	}
 
@@ -144,11 +144,11 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if auth.CheckPasswordHash(params.Password, existCheck.HashedPassword) != nil {
 		fmt.Println("%s", err)
 		// 401 unauthorized
-		http.Error(w, "Wrong password", 401)
+		http.Error(w, "Wrong password", http.StatusUnauthorized)
 		return
 	}
 
-	// when both checks go through: login user, and encode response
+	// when both checks go through: encode response (login user)
 	response := User{
 		Id:         existCheck.ID,
 		Created_at: existCheck.CreatedAt,
@@ -299,7 +299,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// password length checking
-	if len(params.Password) >= 8 {
+	if len(params.Password) >= 4 {
 		// hash the user's password
 		hashedPw, err := auth.HashPassword(params.Password)
 		if err != nil {
