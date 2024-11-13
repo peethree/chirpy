@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -56,4 +58,24 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	}
 
 	return userID, nil
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	// information comes into the Authorization header
+	// looks like : Bearer TOKEN_STRING
+	auth := headers.Get("Authorization")
+
+	// get the token
+	splitAuth := strings.Split(auth, " ")
+	if len(splitAuth) != 2 {
+		return "", errors.New("incorrect bearer token format")
+	}
+
+	// token should be 2nd index
+	token := splitAuth[1]
+
+	// remove white space
+	cleanToken := strings.TrimSpace(token)
+
+	return cleanToken, nil
 }
