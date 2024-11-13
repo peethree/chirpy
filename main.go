@@ -132,7 +132,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	// authenticate user:
 	// check to see if email is in the table then compare password
-	existCheck, err := cfg.db.Login(r.Context(), params.Email)
+	userExist, err := cfg.db.Login(r.Context(), params.Email)
 	if err != nil {
 		fmt.Println("%s", err)
 		// 401 unauthorized
@@ -141,19 +141,19 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if the hash matches password if the user's email exists
-	if auth.CheckPasswordHash(params.Password, existCheck.HashedPassword) != nil {
+	if auth.CheckPasswordHash(params.Password, userExist.HashedPassword) != nil {
 		fmt.Println("%s", err)
 		// 401 unauthorized
 		http.Error(w, "Wrong password", http.StatusUnauthorized)
 		return
 	}
 
-	// when both checks go through: encode response (login user)
+	// when both checks go through -> encode response (login user)
 	response := User{
-		Id:         existCheck.ID,
-		Created_at: existCheck.CreatedAt,
-		Updated_at: existCheck.UpdatedAt,
-		Email:      existCheck.Email,
+		Id:         userExist.ID,
+		Created_at: userExist.CreatedAt,
+		Updated_at: userExist.UpdatedAt,
+		Email:      userExist.Email,
 	}
 
 	// encode response
