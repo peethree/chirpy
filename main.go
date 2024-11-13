@@ -25,11 +25,13 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
 	platform       string
+	JWTsecret      string
 }
 
 type loginParams struct {
-	Password string `json:"password"`
-	Email    string `json:"email"`
+	Password           string        `json:"password"`
+	Email              string        `json:"email"`
+	Expires_in_seconds time.Duration `json:"expires_in_seconds"`
 }
 
 // response struct for creating new users/ logging in
@@ -38,6 +40,7 @@ type User struct {
 	Created_at time.Time `json:"created_at"`
 	Updated_at time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
+	Token      string    `json:"token"`
 }
 
 // struct for making new users and getting their email address
@@ -76,6 +79,8 @@ func main() {
 	// check if .env platform is set to dev
 	platformCheck := os.Getenv("PLATFORM")
 
+	jwtSecret := os.Getenv("SECRET")
+
 	// open connection to the db
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -90,6 +95,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
 		platform:       platformCheck,
+		JWTsecret:      jwtSecret,
 	}
 
 	// create new serve mux
@@ -148,12 +154,23 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// when both checks go through -> encode response (login user)
+	// token
+	// func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
+	jwt, err := auth.MakeJWT(userExist.ID, cfg.JWTsecret, params.Expires_in_seconds)
+	if err != nil {
+		fmt.Println("%s", err)
+		// 401 unauthorized
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// when the user exists and the password matches the hash -> encode response (login user)
 	response := User{
 		Id:         userExist.ID,
 		Created_at: userExist.CreatedAt,
 		Updated_at: userExist.UpdatedAt,
 		Email:      userExist.Email,
+		Token:      jwt,
 	}
 
 	// encode response
@@ -244,6 +261,21 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&params)
 	if err != nil {
 		http.Error(w, "Invalid Json", 400)
+		return
+	}
+
+	// to create a chirp, a user needs to have a valid jwt
+	// get the header for the bearer token
+	bearerToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		http.Error(w, "Can't get bearer token", http.StatusUnauthorized)
+		return
+	}
+
+	// check jwt for validity
+	_, err = auth.ValidateJWT(bearerToken, cfg.JWTsecret)
+	if err != nil {
+		http.Error(w, "Invalid JWT", http.StatusUnauthorized)
 		return
 	}
 

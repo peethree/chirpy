@@ -65,14 +65,24 @@ func GetBearerToken(headers http.Header) (string, error) {
 	// looks like : Bearer TOKEN_STRING
 	auth := headers.Get("Authorization")
 
-	// get the token
+	// empty auth header
+	if auth == "" {
+		return "", errors.New("auth header missing")
+	}
+
+	// extract the token from the header
 	splitAuth := strings.Split(auth, " ")
-	if len(splitAuth) != 2 {
+	if len(splitAuth) != 2 || splitAuth[0] != "Bearer" {
 		return "", errors.New("incorrect bearer token format")
 	}
 
 	// token should be 2nd index
 	token := splitAuth[1]
+
+	// empty token handling
+	if token == "" {
+		return "", errors.New("auth token empty")
+	}
 
 	// remove white space
 	cleanToken := strings.TrimSpace(token)
