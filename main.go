@@ -29,9 +29,9 @@ type apiConfig struct {
 }
 
 type loginParams struct {
-	Password           string        `json:"password"`
-	Email              string        `json:"email"`
-	Expires_in_seconds time.Duration `json:"expires_in_seconds"`
+	Password           string `json:"password"`
+	Email              string `json:"email"`
+	Expires_in_seconds int    `json:"expires_in_seconds"`
 }
 
 // response struct for creating new users/ logging in
@@ -40,7 +40,6 @@ type User struct {
 	Created_at time.Time `json:"created_at"`
 	Updated_at time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
-	Token      string    `json:"token"`
 }
 
 // struct for making new users and getting their email address
@@ -127,6 +126,12 @@ func main() {
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
+
+	type Response struct {
+		User
+		Token string `json:"token"`
+	}
+
 	// decode JSON body
 	decoder := json.NewDecoder(r.Body)
 	params := loginParams{}
@@ -154,23 +159,36 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// if token is expired, return 401 response
+	// if expires_in_seconds is over an hour, set it to an hour // convert it to type time.Duration
+	expirationTime := time.Hour
+	if params.Expires_in_seconds > 0 && params.Expires_in_seconds < 3600 {
+		expirationTime = time.Duration(params.Expires_in_seconds) * time.Second
+	}
+
 	// token
 	// func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
-	jwt, err := auth.MakeJWT(userExist.ID, cfg.JWTsecret, params.Expires_in_seconds)
+	jwt, err := auth.MakeJWT(
+		userExist.ID,
+		cfg.JWTsecret,
+		expirationTime,
+	)
 	if err != nil {
 		fmt.Println("%s", err)
 		// 401 unauthorized
-		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		http.Error(w, "Unable to make a token", http.StatusUnauthorized)
 		return
 	}
 
 	// when the user exists and the password matches the hash -> encode response (login user)
-	response := User{
-		Id:         userExist.ID,
-		Created_at: userExist.CreatedAt,
-		Updated_at: userExist.UpdatedAt,
-		Email:      userExist.Email,
-		Token:      jwt,
+	response := Response{
+		User: User{
+			Id:         userExist.ID,
+			Created_at: userExist.CreatedAt,
+			Updated_at: userExist.UpdatedAt,
+			Email:      userExist.Email,
+		},
+		Token: jwt,
 	}
 
 	// encode response
@@ -268,13 +286,15 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	// get the header for the bearer token
 	bearerToken, err := auth.GetBearerToken(r.Header)
 	if err != nil {
+		fmt.Printf("%s", err)
 		http.Error(w, "Can't get bearer token", http.StatusUnauthorized)
 		return
 	}
 
 	// check jwt for validity
-	_, err = auth.ValidateJWT(bearerToken, cfg.JWTsecret)
+	userID, err := auth.ValidateJWT(bearerToken, cfg.JWTsecret)
 	if err != nil {
+		fmt.Printf("%s", err)
 		http.Error(w, "Invalid JWT", http.StatusUnauthorized)
 		return
 	}
@@ -288,7 +308,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		// insert the chirp into the db with the sqlc generated createchirp function
 		chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 			Body:   removed_profanity,
-			UserID: params.UserID,
+			UserID: userID,
 		})
 
 		if err != nil {
@@ -376,13 +396,8 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 
 // custom handler function
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	//write Content-Type: text/plain; charset=utf-8
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-
-	// write status code
 	w.WriteHeader(http.StatusOK)
-
-	// write body
 	w.Write([]byte("OK"))
 }
 
