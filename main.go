@@ -29,9 +29,9 @@ type apiConfig struct {
 }
 
 type loginParams struct {
-	Password           string `json:"password"`
-	Email              string `json:"email"`
-	Expires_in_seconds int    `json:"expires_in_seconds"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
+	// Expires_in_seconds int    `json:"expires_in_seconds"`
 }
 
 // response struct for creating new users/ logging in
@@ -162,9 +162,9 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	// if token is expired, return 401 response
 	// if expires_in_seconds is over an hour, set it to an hour // convert it to type time.Duration
 	expirationTime := time.Hour
-	if params.Expires_in_seconds > 0 && params.Expires_in_seconds < 3600 {
-		expirationTime = time.Duration(params.Expires_in_seconds) * time.Second
-	}
+	// if params.Expires_in_seconds > 0 && params.Expires_in_seconds < 3600 {
+	// 	expirationTime = time.Duration(params.Expires_in_seconds) * time.Second
+	// }
 
 	// token
 	// func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {

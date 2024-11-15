@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 )
 
-func MakeRefreshToken() string, error {
+func MakeRefreshToken() (string, error) {
 	// 32 bytes of random data
 	n := 32
 	randomData := make([]byte, n)
