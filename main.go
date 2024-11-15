@@ -126,10 +126,10 @@ func main() {
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
-
 	type Response struct {
 		User
-		Token string `json:"token"`
+		Token         string `json:"token"`
+		Refresh_token string `json:"refresh_token"`
 	}
 
 	// decode JSON body
@@ -180,6 +180,15 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// refresh token
+	// func MakeRefreshToken() string, error {
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		fmt.Println("%s", err)
+		http.Error(w, "Unable to make a refresh token", http.StatusUnauthorized)
+		return
+	}
+
 	// when the user exists and the password matches the hash -> encode response (login user)
 	response := Response{
 		User: User{
@@ -188,7 +197,8 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			Updated_at: userExist.UpdatedAt,
 			Email:      userExist.Email,
 		},
-		Token: jwt,
+		Token:         jwt,
+		Refresh_token: refreshToken,
 	}
 
 	// encode response
