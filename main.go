@@ -189,6 +189,18 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// populate db with required refresh token fields
+	// func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
+
+	token, err := cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:  refreshToken,
+		UserID: userExist.ID,
+	})
+	if err != nil {
+		fmt.Println("%s", err)
+		return
+	}
+
 	// when the user exists and the password matches the hash -> encode response (login user)
 	response := Response{
 		User: User{
@@ -198,7 +210,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			Email:      userExist.Email,
 		},
 		Token:         jwt,
-		Refresh_token: refreshToken,
+		Refresh_token: token.Token,
 	}
 
 	// encode response
