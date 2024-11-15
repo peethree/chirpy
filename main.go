@@ -109,6 +109,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", apiCfg.loginHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
+	mux.HandleFunc("POST /api/refresh", apiCfg.refreshHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
@@ -123,6 +124,13 @@ func main() {
 
 	// Use the server's ListenAndServe method to start the server
 	server.ListenAndServe()
+}
+
+func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
+	// TODO:Create a POST /api/refresh endpoint.
+	// This new endpoint does not accept a request body,
+	// but does require a refresh token to be present in the headers,
+	// in the same Authorization: Bearer <token> format.
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +199,6 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	// populate db with required refresh token fields
 	// func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
-
 	token, err := cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
 		Token:  refreshToken,
 		UserID: userExist.ID,
