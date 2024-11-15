@@ -240,7 +240,7 @@ func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Can't load chirps", 400)
 	}
 
-	// declare response variable as a slice of responseChirp structs
+	// dere response variable as a slice of responseChirp structs
 	var response []responseChirp
 
 	// loop over all loaded chirps, fill up a responseChirp struct for each chirp, append it to the response slice
