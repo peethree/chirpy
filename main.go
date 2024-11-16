@@ -65,6 +65,11 @@ type responseChirp struct {
 	User_id    uuid.UUID `json:"user_id"`
 }
 
+// struct for responding to api/refresh
+type responseRefresh struct {
+	Token string `json:"token"`
+}
+
 func main() {
 	// get .env file
 	godotenv.Load()
@@ -130,7 +135,40 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO:Create a POST /api/refresh endpoint.
 	// This new endpoint does not accept a request body,
 	// but does require a refresh token to be present in the headers,
-	// in the same Authorization: Bearer <token> format.
+
+	// Authorization: Bearer <token> format.
+	auth := r.Header.Get("Authorization")
+	splitAuth := strings.Split(auth, " ")
+	refreshToken := splitAuth[1]
+
+	// if token is empty respond with 401 code
+	if refreshToken == "" {
+		http.Error(w, "No refresh token found", http.StatusUnauthorized)
+		return
+	}
+
+	// look for given header token in the db with sqlc generated helper function based on query SELECT * FROM refresh_tokens WHERE token = $1;
+	token, err := cfg.db.FindRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		http.Error(w, "No match with token in DB", http.StatusUnauthorized)
+		return
+	}
+
+	// populate response with the token value
+	response := responseRefresh{
+		Token: token.Token,
+	}
+
+	// encode response
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
