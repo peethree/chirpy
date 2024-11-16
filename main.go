@@ -115,6 +115,8 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.chirpHandler)
 	mux.HandleFunc("POST /api/refresh", apiCfg.refreshHandler)
+	mux.HandleFunc("POST /api/revoke", apiCfg.revokeHandler)
+
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
 
 	// use serve mux method to register fileserver handler for rootpath "/app/"
@@ -131,15 +133,13 @@ func main() {
 	server.ListenAndServe()
 }
 
-func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO:Create a POST /api/refresh endpoint.
-	// This new endpoint does not accept a request body,
-	// but does require a refresh token to be present in the headers,
-
-	// Authorization: Bearer <token> format.
-	auth := r.Header.Get("Authorization")
-	splitAuth := strings.Split(auth, " ")
-	refreshToken := splitAuth[1]
+func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
+	// get the bearer token from authorization header
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		http.Error(w, "can't get the bearer token from the auth header", http.StatusUnauthorized)
+		return
+	}
 
 	// if token is empty respond with 401 code
 	if refreshToken == "" {
@@ -147,9 +147,42 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// look for given header token in the db with sqlc generated helper function based on query SELECT * FROM refresh_tokens WHERE token = $1;
+	// look for the token in the db, no need to store a variable for the token in this case
 	token, err := cfg.db.FindRefreshToken(r.Context(), refreshToken)
 	if err != nil {
+		http.Error(w, "No match with token in DB", http.StatusUnauthorized)
+		return
+	}
+
+	// revoke the token if found -- UPDATE refresh_tokens SET updated_at = NOW(), revoked_at = NOW() WHERE token = $1;
+	err = cfg.db.RevokeToken(r.Context(), token.Token)
+	if err != nil {
+		fmt.Println("%s", err)
+		http.Error(w, "Unable to revoke the refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	// respond with 204 code if all goes well
+	w.WriteHeader(204)
+}
+
+func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		http.Error(w, "can't get authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	// if token is empty respond with 401 code
+	if refreshToken == "" {
+		http.Error(w, "No refresh token found", http.StatusUnauthorized)
+		return
+	}
+
+	// look for the token in the db with sqlc generated helper function based on query SELECT * FROM refresh_tokens WHERE token = $1;
+	token, err := cfg.db.FindRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		// token is expired or doesn't exist
 		http.Error(w, "No match with token in DB", http.StatusUnauthorized)
 		return
 	}
@@ -338,6 +371,10 @@ func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) 
 	w.Write(dat)
 }
 
+//!!!
+//TODO: "invalid JWT"  fix
+//!!!
+
 // create chirp handler
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	// decode the JSON body
@@ -357,6 +394,8 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Can't get bearer token", http.StatusUnauthorized)
 		return
 	}
+
+	fmt.Printf("Received token: %s\n", bearerToken)
 
 	// check jwt for validity
 	userID, err := auth.ValidateJWT(bearerToken, cfg.JWTsecret)
