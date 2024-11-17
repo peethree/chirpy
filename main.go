@@ -119,6 +119,8 @@ func main() {
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
 
+	mux.HandleFunc("PUT /api/users", apiCfg.updateUserHandler)
+
 	// use serve mux method to register fileserver handler for rootpath "/app/"
 	// strip prefix from the request path before passing it to the fileserver handler
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -131,6 +133,101 @@ func main() {
 
 	// Use the server's ListenAndServe method to start the server
 	server.ListenAndServe()
+}
+
+func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
+	// access token in header
+	bearerToken, err := auth.GetBearerToken(r.Header)
+	// respond with 401 if missing or malformed
+	if err != nil {
+		http.Error(w, "auth bearer token required for updating email/password", http.StatusUnauthorized)
+		return
+	}
+
+	// look which user it is based on bearer token
+	user, err := auth.ValidateJWT(bearerToken, cfg.JWTsecret)
+	if err != nil {
+		http.Error(w, "user does not have a valid access token", http.StatusUnauthorized)
+		return
+	}
+
+	// decode the request body
+	decoder := json.NewDecoder(r.Body)
+	params := loginParams{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		fmt.Printf("%s", err)
+		http.Error(w, "Invalid Json", 400)
+		return
+	}
+
+	// email field can't be empty
+	if params.Email == "" {
+		http.Error(w, "No email address given", http.StatusUnauthorized)
+		return
+	}
+
+	// password field may not be empty either
+	if params.Password == "" {
+		http.Error(w, "No password given", http.StatusUnauthorized)
+		return
+	}
+
+	// look for email in db -- SELECT id, created_at, updated_at, email, hashed_password FROM users WHERE email = $1
+	// func (q *Queries) FindEmail(ctx context.Context, email string) (User, error) {
+	_, err = cfg.db.FindEmail(r.Context(), params.Email)
+	// if email is found in db -> nil error -> it's already being used
+	if err == nil {
+		http.Error(w, "Email address is in use already", http.StatusUnauthorized)
+		return
+	}
+
+	// hash the password
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		http.Error(w, "Unable to hash password", http.StatusUnauthorized)
+		return
+	}
+
+	// update db with new email and new pw hash
+	// func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	err = cfg.db.UpdateUser(r.Context(), database.UpdateUserParams{
+		// arg.Email, arg.HashedPassword, arg.ID
+		Email:          params.Email,
+		HashedPassword: hashedPassword,
+		ID:             user,
+	})
+	if err != nil {
+		http.Error(w, "Unable to update user's data", http.StatusUnauthorized)
+		return
+	}
+
+	// find the updated user data based on user id
+	// func (q *Queries) FindUserById(ctx context.Context, id uuid.UUID) (User, error) {
+	updatedUser, err := cfg.db.FindUserById(r.Context(), user)
+	if err != nil {
+		http.Error(w, "Error finding the user based on id", http.StatusUnauthorized)
+		return
+	}
+
+	// populate response
+	response := User{
+		Id:         updatedUser.ID,
+		Created_at: updatedUser.CreatedAt,
+		Updated_at: updatedUser.UpdatedAt,
+		Email:      updatedUser.Email,
+	}
+
+	// encode response
+	dat, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(dat)
 }
 
 func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {

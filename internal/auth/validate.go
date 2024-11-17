@@ -30,7 +30,7 @@ func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (str
 	return signedToken, nil
 }
 
-// func to validate the created jwt
+// func to validate the created jwt and return the associated user information
 func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 
 	// func ParseWithClaims(tokenString string, claims Claims, keyFunc Keyfunc, options ...ParserOption) (*Token, error)
