@@ -187,9 +187,16 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// create a new jwt token for the user if there's a match in the db with the refresh token (expires in 1 hour)
+	jwtToken, err := auth.MakeJWT(token.UserID, cfg.JWTsecret, time.Hour)
+	if err != nil {
+		http.Error(w, "Unable to create new jwt token", http.StatusUnauthorized)
+		return
+	}
+
 	// populate response with the token value
 	response := responseRefresh{
-		Token: token.Token,
+		Token: jwtToken,
 	}
 
 	// encode response
@@ -239,11 +246,8 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// if token is expired, return 401 response
-	// if expires_in_seconds is over an hour, set it to an hour // convert it to type time.Duration
+
 	expirationTime := time.Hour
-	// if params.Expires_in_seconds > 0 && params.Expires_in_seconds < 3600 {
-	// 	expirationTime = time.Duration(params.Expires_in_seconds) * time.Second
-	// }
 
 	// token
 	// func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
@@ -371,10 +375,6 @@ func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) 
 	w.Write(dat)
 }
 
-//!!!
-//TODO: "invalid JWT"  fix
-//!!!
-
 // create chirp handler
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	// decode the JSON body
@@ -382,6 +382,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	params := Chirp{}
 	err := decoder.Decode(&params)
 	if err != nil {
+		fmt.Printf("%s", err)
 		http.Error(w, "Invalid Json", 400)
 		return
 	}
