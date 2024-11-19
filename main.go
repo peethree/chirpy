@@ -121,9 +121,11 @@ func main() {
 	// register handlers
 	// GET
 	mux.HandleFunc("GET /api/healthz", healthzHandler)
+	// optional author id query and sorting asc/desc
 	mux.HandleFunc("GET /api/chirps", apiCfg.loadChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.loadChirpByIDHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.adminMetricsHandler)
+
 	// POST
 	mux.HandleFunc("POST /api/login", apiCfg.loginHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
@@ -561,46 +563,113 @@ func (cfg *apiConfig) loadChirpByIDHandler(w http.ResponseWriter, r *http.Reques
 
 // retrieves all chirps in ascending order by created_at (oldest first)
 func (cfg *apiConfig) loadChirpsHandler(w http.ResponseWriter, r *http.Request) {
-	// sqlc generated function for loading all chirps based on: SELECT * FROM chirps;
-	loadedChirps, err := cfg.db.LoadChirps(r.Context())
-	if err != nil {
-		http.Error(w, "Can't load chirps", 400)
-	}
+	// if there is query, retrieve just the chirps from that query
+	queryAuthor := r.URL.Query().Get("author_id")
+	// optional sorting query
+	querySort := r.URL.Query().Get("sort")
 
-	// dere response variable as a slice of responseChirp structs
-	var response []responseChirp
-
-	// loop over all loaded chirps, fill up a responseChirp struct for each chirp, append it to the response slice
-	for _, chirp := range loadedChirps {
-		individualChirp := responseChirp{
-			Body:       chirp.Body,
-			Created_at: chirp.CreatedAt,
-			Updated_at: chirp.UpdatedAt,
-			User_id:    chirp.UserID,
+	// when no query is given, load every chirp
+	if queryAuthor == "" {
+		loadedChirps, err := cfg.db.LoadChirps(r.Context())
+		if err != nil {
+			http.Error(w, "Can't load chirps", 400)
 		}
-		response = append(response, individualChirp)
-	}
 
-	// sort the chirps by created_at
-	sort.Slice(response, func(i, j int) bool {
-		return response[i].Created_at.Before(response[j].Created_at)
-	})
+		var response []responseChirp
 
-	// marshal the chirps, encoderesponse function does not work with a slice of responseChirp as a parameter
-	dat, err := json.Marshal(response)
-	if err != nil {
-		log.Printf("Error marshalling JSON: %s", err)
-		w.WriteHeader(500)
-		return
+		// loop over all loaded chirps, fill up a responseChirp struct for each chirp, append it to the response slice
+		for _, chirp := range loadedChirps {
+			individualChirp := responseChirp{
+				Body:       chirp.Body,
+				Created_at: chirp.CreatedAt,
+				Updated_at: chirp.UpdatedAt,
+				User_id:    chirp.UserID,
+			}
+			response = append(response, individualChirp)
+		}
+		// response variable as a slice of responseChirp structs
+		// sort the chirps by created_at in ascending order by default and if query is asc
+		if querySort == "asc" && querySort == "" {
+			sort.Slice(response, func(i, j int) bool {
+				return response[i].Created_at.Before(response[j].Created_at)
+			})
+		}
+
+		if querySort == "desc" {
+			// descending order
+			sort.Slice(response, func(i, j int) bool {
+				return response[i].Created_at.After(response[j].Created_at)
+			})
+		}
+
+		// marshal the chirps, encoderesponse function does not work with a slice of responseChirp as a parameter
+		dat, err := json.Marshal(response)
+		if err != nil {
+			log.Printf("Error marshalling JSON: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(dat)
+	} else {
+		// parse query to uuid type
+		author, err := uuid.Parse(queryAuthor)
+		if err != nil {
+			http.Error(w, "unable to parse query into uuid", 400)
+		}
+
+		// look for query (chirp author) in db
+		loadedChirps, err := cfg.db.LoadChirpsByAuthor(r.Context(), author)
+		if err != nil {
+			http.Error(w, "Cannot find this user's chirps", 400)
+			return
+		}
+		var response []responseChirp
+
+		for _, chirp := range loadedChirps {
+			individualChirp := responseChirp{
+				Body:       chirp.Body,
+				Created_at: chirp.CreatedAt,
+				Updated_at: chirp.UpdatedAt,
+				User_id:    chirp.UserID,
+			}
+			response = append(response, individualChirp)
+		}
+
+		// response variable as a slice of responseChirp structs
+		// sort the chirps by created_at in ascending order
+		if querySort == "asc" && querySort == "" {
+			{
+				sort.Slice(response, func(i, j int) bool {
+					return response[i].Created_at.Before(response[j].Created_at)
+				})
+			}
+
+			if querySort == "desc" {
+				// descending order
+				sort.Slice(response, func(i, j int) bool {
+					return response[i].Created_at.After(response[j].Created_at)
+				})
+			}
+
+			// marshal the chirps, encode response function does not work with a slice of responseChirp as a parameter
+			dat, err := json.Marshal(response)
+			if err != nil {
+				log.Printf("Error marshalling JSON: %s", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(200)
+			w.Write(dat)
+		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	w.Write(dat)
 }
 
 // create chirp handler
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
-	// decode the JSON body
+	// descode the JSON body
 	decoder := json.NewDecoder(r.Body)
 	params := Chirp{}
 	err := decoder.Decode(&params)
