@@ -18,6 +18,7 @@
 
 ## create a user account
 request: POST /api/users
+
 request body:
 
 ```json
@@ -43,6 +44,7 @@ response body:
 
 ## login user
 request: POST /api/login
+
 request body:
 
 ```json
@@ -68,6 +70,7 @@ response body:
 
 ## update user information
 request: PUT /api/users
+
 request body:
 
 ```json
@@ -92,6 +95,7 @@ response body:
 
 ## refresh jwt
 request: POST /api/refresh
+
 **requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**
 
 response body:
@@ -110,6 +114,7 @@ response: 204 code if all goes well
 
 ## polka webhook
 request: POST /api/polka/webhooks
+
 request body:
 
 ```json
@@ -129,6 +134,7 @@ response: 204 in case event is anything other than "user.upgraded" and in case e
 
 ## create chirp
 request: POST /api/chirps
+
 request body:
 
 ```json
@@ -204,7 +210,7 @@ response: 204 code upon successful deletion
 # misc
 
 ## check api status
-request: GET /api/healthz\
+request: GET /api/healthz
 response: 200 code + "OK" message
 
 ## admin metrics: hits counter
@@ -215,7 +221,7 @@ request: GET /admin/metrics
 response: html template -> "Chirpy has been visited %d times!"
 
 ## admin metrics: DELETE users and reset hits counter
-request POST /admin/reset\
+request POST /admin/reset
 
 **requires PLATFORM="dev" setting from environment**
 
