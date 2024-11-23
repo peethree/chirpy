@@ -17,8 +17,8 @@
 # Users
 
 #### create a user account
-request: POST /api/users\
-request body:\
+request: POST /api/users
+request body:
 
 ```json
 {
@@ -29,7 +29,7 @@ request body:\
 
 **Password will be hashed, then stored inside db.**
 
-response body:\
+response body:
 
 ```json
 {
@@ -42,8 +42,8 @@ response body:\
 ```
 
 #### login user
-request: POST /api/login\
-request body:\
+request: POST /api/login
+request body:
 
 ```json
 {
@@ -52,7 +52,7 @@ request body:\
 }
 ```
 
-response body:\
+response body:
 
 ```json
 {
@@ -67,8 +67,8 @@ response body:\
 ```	
 
 #### update user information
-request: PUT /api/users\
-request body:\
+request: PUT /api/users
+request body:
 
 ```json
 {
@@ -78,7 +78,7 @@ request body:\
 ```
 **limitation: email and password must both be fresh. Will not work unless the requesting client has a (valid) jwt that links to the existing user attempting to change its login info.**
 
-response body:\
+response body:
 
 ```json
 {
@@ -91,8 +91,8 @@ response body:\
 ```
 
 #### refresh jwt
-request: POST /api/refresh\
-**requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**\
+request: POST /api/refresh
+**requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**
 
 response body:
 
@@ -103,14 +103,14 @@ response body:
 ```
 
 #### revoke refresh token
-request: POST /api/revoke\
+request: POST /api/revoke
 **requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**
 
-response: 204 code if all goes well\
+response: 204 code if all goes well
 
 #### polka webhook
-request: POST /api/polka/webhooks\
-request body:\
+request: POST /api/polka/webhooks
+request body:
 
 ```json
 {
@@ -121,15 +121,15 @@ request body:\
 }
 ```
 
-requires polka api key to be present in environmnet file\
+requires polka api key to be present in environmnet file
 
-response: 204 in case event is anything other than "user.upgraded" and in case everything went well and the user was successfully upgraded (idempotent handler).\
+response: 204 in case event is anything other than "user.upgraded" and in case everything went well and the user was successfully upgraded (idempotent handler).
 
 # Chirps 
 
 #### create chirp
-request: POST /api/chirps\
-request body:\
+request: POST /api/chirps
+request body:
 
 ```json
 {
@@ -140,7 +140,7 @@ request body:\
 
 **limitation: chirp length (body) cannot exceed 140 tokens.**
 
-response request:\
+response request:
 
 ```json
 {
@@ -154,7 +154,7 @@ response request:\
 ```		
 
 #### load posted chirps
-request: GET /api/chirps\
+request: GET /api/chirps
 
 **optional: author id query and sorting asc/desc**
 examples:\
@@ -162,7 +162,7 @@ examples:\
 + GET /api/chirps?sort=asc
 + GET /api/chirps?sort=desc
 
-response body:\
+response body:
 
 ```json
 [
@@ -199,27 +199,27 @@ response body:
 
 #### delete chirp
 request: DELETE /api/chirps/{chirpID}\
-response: 204 code upon successful deletion\
+response: 204 code upon successful deletion
 
 # misc
 
 #### check api status
 request: GET /api/healthz\
-response: 200 code + "OK" message\
+response: 200 code + "OK" message
 
 #### admin metrics: hits counter
-request: GET /admin/metrics\
+request: GET /admin/metrics
 
 **requires PLATFORM="dev" setting from environment**
 
-response: html template -> "Chirpy has been visited %d times!"\
+response: html template -> "Chirpy has been visited %d times!"
 
 #### admin metrics: DELETE users and reset hits counter
 request POST /admin/reset\
 
 **requires PLATFORM="dev" setting from environment**
 
-response: "Hits reset to 0, users deleted"\
+response: "Hits reset to 0, users deleted"
 
 
 
