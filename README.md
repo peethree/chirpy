@@ -16,7 +16,7 @@
 
 # Users
 
-#### create a user account
+## create a user account
 request: POST /api/users
 request body:
 
@@ -41,7 +41,7 @@ response body:
 }
 ```
 
-#### login user
+## login user
 request: POST /api/login
 request body:
 
@@ -66,7 +66,7 @@ response body:
 }
 ```	
 
-#### update user information
+## update user information
 request: PUT /api/users
 request body:
 
@@ -90,7 +90,7 @@ response body:
 }
 ```
 
-#### refresh jwt
+## refresh jwt
 request: POST /api/refresh
 **requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**
 
@@ -102,13 +102,13 @@ response body:
 }
 ```
 
-#### revoke refresh token
+## revoke refresh token
 request: POST /api/revoke
 **requires authorization header in this form: 'Authorization: Bearer TOKEN_STRING'**
 
 response: 204 code if all goes well
 
-#### polka webhook
+## polka webhook
 request: POST /api/polka/webhooks
 request body:
 
@@ -127,7 +127,7 @@ response: 204 in case event is anything other than "user.upgraded" and in case e
 
 # Chirps 
 
-#### create chirp
+## create chirp
 request: POST /api/chirps
 request body:
 
@@ -153,7 +153,7 @@ response request:
 }
 ```		
 
-#### load posted chirps
+## load posted chirps
 request: GET /api/chirps
 
 **optional: author id query and sorting asc/desc**
@@ -183,7 +183,7 @@ response body:
 ]
 ```
 
-#### load specific chirp (by id)
+## load specific chirp (by id)
 request: GET /api/chirps/{chirpID}
 
 response body:
@@ -197,24 +197,24 @@ response body:
   }
 ```
 
-#### delete chirp
+## delete chirp
 request: DELETE /api/chirps/{chirpID}\
 response: 204 code upon successful deletion
 
 # misc
 
-#### check api status
+## check api status
 request: GET /api/healthz\
 response: 200 code + "OK" message
 
-#### admin metrics: hits counter
+## admin metrics: hits counter
 request: GET /admin/metrics
 
 **requires PLATFORM="dev" setting from environment**
 
 response: html template -> "Chirpy has been visited %d times!"
 
-#### admin metrics: DELETE users and reset hits counter
+## admin metrics: DELETE users and reset hits counter
 request POST /admin/reset\
 
 **requires PLATFORM="dev" setting from environment**
